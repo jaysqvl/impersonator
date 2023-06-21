@@ -1,65 +1,98 @@
-import torch
 import streamlit as st
 import os
-
 from dotenv import load_dotenv
-from transformers import OpenAiAgent
-from transformers import load_tool
-from transformers import AutoTokenizer, AutoModel
 from streamlit_chat import message
+from pypdf import PdfReader
+from langchain.chains import ConversationalRetrievalChain
+from langchain.text_splitter import CharacterTextSplitter
+from langchain.embeddings import OpenAIEmbeddings, HuggingFaceInstructEmbeddings
+from langchain.chat_models import ChatOpenAI
+import vecs
+from supabase import create_client, Client
+import openai
 
-tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
-model = AutoModel.from_pretrained('bert-base-uncased')
+# SETUP BEFORE USE
+load_dotenv()
+oa_api_key = os.getenv('OPENAI_API_KEY')
+sb_api_key = os.getenv('SUPABASE_APY_KEY')
+sb_prj_url = os.getenv('SUPABASE_PROJ_URL')
+supabase: Client = create_client(sb_prj_url, sb_api_key)
 
-# INPUT: An array of files uploaded
-def processinput(files):
-    sentence_embeddings = []
+def generate_answer():
+    bot_response = st.session_state.conversation({'question': st.session_state.input_text})
+    
+    st.session_state.history.append({"message": st.session_state.input_text, "is_user": True})
+    st.session_state.history.append({"message": bot_response, "is_user": False})
 
-    for f in files:
-        # Read the file content and decode it as text
-        text = f.getvalue().decode('utf-8')
-        # Let's assume each line in the file is a sentence
-        sentences = text.split('\n')
-        # Compute embeddings for all sentences in the file
-        file_embeddings = [get_sentence_embedding(sentence) for sentence in sentences]
-        # Add the embeddings from this file to the overall list
-        sentence_embeddings.extend(file_embeddings)
+    for i, chat in enumerate(st.session_state.history):
+        message(**chat, key=str(i)) #unpacking
 
-    return sentence_embeddings
+    # Clears the input text
+    st.session_state["input_text"] = ""
 
-def encode_text(text):
-    inputs = tokenizer(text, return_tensors='pt', truncation=True, padding=True)
-    outputs = model(**inputs)
-    return outputs.last_hidden_state
+def ingest(pdfs):
+    text = get_text(pdfs)
+    text_batches = get_text_batches(text)
 
-def get_sentence_embedding(text):
-    output = encode_text(text)
-    sentence_embedding = output.mean(dim=1)  # We take the mean to get a sentence embedding
-    return sentence_embedding
+    return text_batches
+
+def get_text(pdfs):
+    text = ""
+    for pdf in pdfs:
+        pdf_reader = PdfReader(pdf)
+        for page in pdf_reader.pages:
+            text += page.extract_text()
+    return text
+
+def get_text_batches(text):
+    text_splitter = CharacterTextSplitter(
+        separator="\n",
+        chunk_size = 1000,
+        chunk_overlap = 0
+    )
+    return text_splitter.split_text(text)
+
+# Creates Vector DB
+def init_vector_db(text_batches):
+    # embeddings = embeddings
+    # db = FAISS.from_texts(texts = text_batches, embedding = embeddings)
+    count = 0
+    for text in text_batches:
+        response = openai.Embedding.create(
+            input = text,
+            model = "text-embedding-ada-002"
+        )
+        vector_db = supabase.table("langchainpythondemo").insert({"id": count, "content": text, "embedding": response}).execute()
+        count += 1
+
+    return vector_db
+
+def get_conversation_chain(vector_db):
+    llm = ChatOpenAI()
+
+    retriever = 
+
 
 def main():
-    # SETUP
-    print(torch.cuda.is_available())
-    load_dotenv()
-    oa_api_key = os.getenv('OPENAI_API_KEY')
-    agent = OpenAiAgent(model="gpt-3.5-turbo", api_key=oa_api_key)
-    st.title("Welcome to Jays HuggingFace AI Playground")
-    
-    # This is the trained data
-    vectors = processinput(st.file_uploader("Raw text files only", accept_multiple_files=True))
+    st.header("Welcome to Jays Trainable Chatbot")
+    with st.sidebar:
+        st.subheader("Your documents")
+        pdfs = st.file_uploader("Upload your PDFs here and click on 'Process'", accept_multiple_files=True)
+        if st.button("Process"):
+            with st.spinner("Processing"):
+                # get pdf text
+                text_batches = ingest(pdfs)
 
-    # TRANSFORMERS CHATBOT
-    message("Welcome! I am an AI chatbot ready to be trained")
-    message("wassup", is_user=True)
+                # Initialize the vector db
+                vector_db = init_vector_db(text_batches)
 
-    # Transformers
-    boat = agent.run("Generate an image of a baby hippo")
-    st.image(boat)
+                # create conversation chain
+                st.session_state.conversation = get_conversation_chain(vector_db)
 
-    caption = agent.run("Caption the following 'image' trendily like a millenial would for a post on instagram", image = boat, max_new_tokens = 20)
-    st.write(caption)
+    if "history" not in st.session_state:
+        st.session_state.history = []
 
-    st.write("finished Execution")
+    st.text_input("Talk to the bot", key="input_text", on_change=generate_answer)
 
 if __name__ == "__main__":
     main()
