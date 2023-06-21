@@ -9,29 +9,27 @@ from langchain.embeddings import OpenAIEmbeddings, HuggingFaceInstructEmbeddings
 from langchain.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain.vectorstores import SupabaseVectorStore
-import vecs
 from supabase import create_client, Client
-import openai
 
 # SETUP BEFORE USE
 load_dotenv()
 oa_api_key = os.getenv('OPENAI_API_KEY')
 sb_api_key = os.getenv('SUPABASE_API_KEY')
-sb_prj_url = os.getenv('SUPABASE_PROJ_URL')
-supabase: Client = create_client(sb_prj_url, sb_api_key)
+sb_proj_url = os.getenv('SUPABASE_PROJ_URL')
+supabase: Client = create_client(sb_proj_url, sb_api_key)
 
 def generate_answer(user_input):
-    response = st.session_state.conversation({'question': user_input})
+    response = st.session_state.conversation({'question': st.session_state.input_text})
     st.session_state.chat_history = response['chat_history']
 
     for i, message in enumerate(st.session_state.chat_history):
         if i % 2 == 0:
-            st_message(message.content)
+            st_message(message.content, is_user=True)
         else:
-            st_message(message.content)
+            st_message(message.content, is_user=False)
     
     # Clears the input text
-    st.session_state["input_text"] = ""
+    # st.session_state["input_text"] = ""
 
 def ingest(pdfs):
     text = get_text(pdfs)
@@ -57,13 +55,13 @@ def get_text_batches(text):
 
 # Creates Vector DB
 def init_vector_db(text_batches):
-    embeddings = OpenAIEmbeddings()
-    vector_db = SupabaseVectorStore.from_texts(text_batches, embeddings, client=supabase, table_name="langchainpythondemo")
-    
+    print(text_batches)
+    embeddings = OpenAIEmbeddings(openai_api_key=oa_api_key)
+    vector_db = SupabaseVectorStore.from_texts(text_batches, embeddings, client=supabase, table_name="documents")
     return vector_db
 
 def get_conversation_chain(vector_db):
-    llm = ChatOpenAI()
+    llm = ChatOpenAI(openai_api_key=oa_api_key, model="gpt-3.5-turbo")
     # llm = HuggingFaceHub(repo_id="google/flan-t5-xxl", model_kwargs={"temperature":0.5, "max_length":512})
 
     memory = ConversationBufferMemory(
