@@ -7,6 +7,7 @@ from langchain.chains import ConversationalRetrievalChain
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.embeddings import OpenAIEmbeddings, HuggingFaceInstructEmbeddings
 from langchain.chat_models import ChatOpenAI
+from langchain.memory import ConversationBufferMemory
 import vecs
 from supabase import create_client, Client
 import openai
@@ -14,7 +15,7 @@ import openai
 # SETUP BEFORE USE
 load_dotenv()
 oa_api_key = os.getenv('OPENAI_API_KEY')
-sb_api_key = os.getenv('SUPABASE_APY_KEY')
+sb_api_key = os.getenv('SUPABASE_API_KEY')
 sb_prj_url = os.getenv('SUPABASE_PROJ_URL')
 supabase: Client = create_client(sb_prj_url, sb_api_key)
 
@@ -62,15 +63,26 @@ def init_vector_db(text_batches):
             input = text,
             model = "text-embedding-ada-002"
         )
-        vector_db = supabase.table("langchainpythondemo").insert({"id": count, "content": text, "embedding": response}).execute()
+        supabase.table("langchainpythondemo").insert(
+            {"id": count, "content": text, "embedding": response}
+            ).execute()
         count += 1
 
-    return vector_db
+    return supabase.table('langchainpythondemo').select("*").execute()
 
 def get_conversation_chain(vector_db):
     llm = ChatOpenAI()
+    # llm = HuggingFaceHub(repo_id="google/flan-t5-xxl", model_kwargs={"temperature":0.5, "max_length":512})
 
-    retriever = 
+    memory = ConversationBufferMemory(
+        memory_key='history', return_messages=True)
+    conversation_chain = ConversationalRetrievalChain.from_llm(
+        llm=llm,
+        retriever=vector_db.asRetriever(),
+        memory=memory
+    )
+
+    return conversation_chain
 
 
 def main():
