@@ -6,3 +6,4 @@ streamlit-chat=0.0.2.2
 pypdf==3.10.0
 vecs==0.2.6
 supabase==1.0.3-py3-none-any.whl
+tiktoken==0.4.0

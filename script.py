@@ -1,13 +1,14 @@
 import streamlit as st
 import os
 from dotenv import load_dotenv
-from streamlit_chat import message
+from streamlit_chat import message as st_message
 from pypdf import PdfReader
 from langchain.chains import ConversationalRetrievalChain
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.embeddings import OpenAIEmbeddings, HuggingFaceInstructEmbeddings
 from langchain.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
+from langchain.vectorstores import SupabaseVectorStore
 import vecs
 from supabase import create_client, Client
 import openai
@@ -19,14 +20,21 @@ sb_api_key = os.getenv('SUPABASE_API_KEY')
 sb_prj_url = os.getenv('SUPABASE_PROJ_URL')
 supabase: Client = create_client(sb_prj_url, sb_api_key)
 
-def generate_answer():
-    bot_response = st.session_state.conversation({'question': st.session_state.input_text})
-    
-    st.session_state.history.append({"message": st.session_state.input_text, "is_user": True})
-    st.session_state.history.append({"message": bot_response, "is_user": False})
+def generate_answer(user_input):
+    response = st.session_state.conversation({'question': user_input})
+    st.session_state.chat_history = response['chat_history']
 
-    for i, chat in enumerate(st.session_state.history):
-        message(**chat, key=str(i)) #unpacking
+    for i, message in enumerate(st.session_state.chat_history):
+        if i % 2 == 0:
+            st_message(message.content)
+        else:
+            st_message(message.content)
+    
+    # st.session_state.history.append({"message": st.session_state.input_text, "is_user": True})
+    # st.session_state.history.append({"message": bot_response, "is_user": False})
+
+    # for i, chat in enumerate(st.session_state.history):
+    #     message(**chat, key=str(i)) #unpacking
 
     # Clears the input text
     st.session_state["input_text"] = ""
@@ -49,7 +57,7 @@ def get_text_batches(text):
     text_splitter = CharacterTextSplitter(
         separator="\n",
         chunk_size = 1000,
-        chunk_overlap = 0
+        chunk_overlap = 100
     )
     return text_splitter.split_text(text)
 
@@ -57,28 +65,31 @@ def get_text_batches(text):
 def init_vector_db(text_batches):
     # embeddings = embeddings
     # db = FAISS.from_texts(texts = text_batches, embedding = embeddings)
-    count = 0
-    for text in text_batches:
-        response = openai.Embedding.create(
-            input = text,
-            model = "text-embedding-ada-002"
-        )
-        supabase.table("langchainpythondemo").insert(
-            {"id": count, "content": text, "embedding": response}
-            ).execute()
-        count += 1
+    # count = 0
+    # for text in text_batches:
+    #     response = openai.Embedding.create(
+    #         input = text,
+    #         model = "text-embedding-ada-002"
+    #     )
+    #     supabase.table("langchainpythondemo").insert(
+    #         {"id": count, "content": text, "embedding": response}
+    #         ).execute()
+    #     count += 1
 
-    return supabase.table('langchainpythondemo').select("*").execute()
+    embeddings = OpenAIEmbeddings()
+    vector_db = SupabaseVectorStore.from_texts(text_batches, embeddings, client=supabase, table_name="langchainpythondemo")
+    
+    return vector_db
 
 def get_conversation_chain(vector_db):
     llm = ChatOpenAI()
     # llm = HuggingFaceHub(repo_id="google/flan-t5-xxl", model_kwargs={"temperature":0.5, "max_length":512})
 
     memory = ConversationBufferMemory(
-        memory_key='history', return_messages=True)
+        memory_key='chat_history', return_messages=True)
     conversation_chain = ConversationalRetrievalChain.from_llm(
         llm=llm,
-        retriever=vector_db.asRetriever(),
+        retriever=vector_db.as_retriever(search_type="similarity"),
         memory=memory
     )
 
@@ -87,6 +98,16 @@ def get_conversation_chain(vector_db):
 
 def main():
     st.header("Welcome to Jays Trainable Chatbot")
+
+    if "conversation" not in st.session_state:
+        st.session_state.conversation = None
+    if "chat_history" not in st.session_state:
+        st.session_state.history = None
+
+    user_input = st.text_input("Talk to the bot", key="input_text")
+    if user_input:
+        generate_answer(user_input)
+
     with st.sidebar:
         st.subheader("Your documents")
         pdfs = st.file_uploader("Upload your PDFs here and click on 'Process'", accept_multiple_files=True)
@@ -100,11 +121,6 @@ def main():
 
                 # create conversation chain
                 st.session_state.conversation = get_conversation_chain(vector_db)
-
-    if "history" not in st.session_state:
-        st.session_state.history = []
-
-    st.text_input("Talk to the bot", key="input_text", on_change=generate_answer)
 
 if __name__ == "__main__":
     main()
