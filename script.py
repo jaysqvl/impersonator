@@ -30,12 +30,6 @@ def generate_answer(user_input):
         else:
             st_message(message.content)
     
-    # st.session_state.history.append({"message": st.session_state.input_text, "is_user": True})
-    # st.session_state.history.append({"message": bot_response, "is_user": False})
-
-    # for i, chat in enumerate(st.session_state.history):
-    #     message(**chat, key=str(i)) #unpacking
-
     # Clears the input text
     st.session_state["input_text"] = ""
 
@@ -63,19 +57,6 @@ def get_text_batches(text):
 
 # Creates Vector DB
 def init_vector_db(text_batches):
-    # embeddings = embeddings
-    # db = FAISS.from_texts(texts = text_batches, embedding = embeddings)
-    # count = 0
-    # for text in text_batches:
-    #     response = openai.Embedding.create(
-    #         input = text,
-    #         model = "text-embedding-ada-002"
-    #     )
-    #     supabase.table("langchainpythondemo").insert(
-    #         {"id": count, "content": text, "embedding": response}
-    #         ).execute()
-    #     count += 1
-
     embeddings = OpenAIEmbeddings()
     vector_db = SupabaseVectorStore.from_texts(text_batches, embeddings, client=supabase, table_name="langchainpythondemo")
     
