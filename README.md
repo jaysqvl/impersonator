@@ -1,5 +1,6 @@
 # impersonator
-Using AI Agents, impersonates the user using the provided speech, written, or online data
+Use the LLM and VectorDB of your choice to query any set of raw text e.g. PDFs, .txt, ebooks, etc.
+Answers any knowledge based questions by using retrieval from the embeddings stored in a VectorDB and returns them using the LLM as an interface to deliver the information.
 
 # Instructions
 1. Install all dependencies\
