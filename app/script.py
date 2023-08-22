@@ -19,7 +19,7 @@ sb_proj_url = os.getenv('SUPABASE_PROJ_URL')
 supabase: Client = create_client(sb_proj_url, sb_api_key)
 
 def generate_answer(user_input):
-    response = st.session_state.conversation({'question': st.session_state.input_text})
+    response = st.session_state.conversation({'question': user_input})
     st.session_state.chat_history = response['chat_history']
 
     for i, message in enumerate(st.session_state.chat_history):
@@ -82,7 +82,7 @@ def main():
         st.session_state.conversation = None
     if "chat_history" not in st.session_state:
         st.session_state.history = None
-
+    
     user_input = st.text_input("Talk to the bot", key="input_text")
     if user_input:
         generate_answer(user_input)
