@@ -9,14 +9,14 @@
 # Container
 # The actual running process where we have a package project running
 
-FROM python:3.11.3
+FROM python:3.11.4-bookworm
 
 # Set the working directory
 WORKDIR /app
 
 ADD script.py .
 
-RUN pip install requirements.txt
+RUN pip install -r requirements.txt
 
 EXPOSE 8501
 
