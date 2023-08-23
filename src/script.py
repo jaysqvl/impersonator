@@ -10,6 +10,7 @@ from langchain.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain.vectorstores import SupabaseVectorStore
 from supabase import create_client, Client
+# import pinecone
 
 # SETUP BEFORE USE
 load_dotenv()
@@ -17,6 +18,9 @@ oa_api_key = os.getenv('OPENAI_API_KEY')
 sb_api_key = os.getenv('SUPABASE_API_KEY')
 sb_proj_url = os.getenv('SUPABASE_PROJ_URL')
 supabase: Client = create_client(sb_proj_url, sb_api_key)
+
+# for switching to pinecone
+# pinecone.init(api_key=os.getenv('PINECONE_API_KEY'), environment="us-west1-gcp");
 
 def generate_answer(user_input):
     response = st.session_state.conversation({'question': user_input})
@@ -58,10 +62,16 @@ def init_vector_db(text_batches):
     print(text_batches)
     embeddings = OpenAIEmbeddings(openai_api_key=oa_api_key)
     vector_db = SupabaseVectorStore.from_texts(text_batches, embeddings, client=supabase, table_name="documents")
+    
+    # for switching to pinecone
+    # vecter_db = pinecone.create_index("python-index", dimension=1536, metric="cosine")
+
     return vector_db
 
 def get_conversation_chain(vector_db):
     llm = ChatOpenAI(openai_api_key=oa_api_key, model="gpt-3.5-turbo")
+
+    # for switching to huggingface to use different LLMs
     # llm = HuggingFaceHub(repo_id="google/flan-t5-xxl", model_kwargs={"temperature":0.5, "max_length":512})
 
     memory = ConversationBufferMemory(
