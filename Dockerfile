@@ -12,9 +12,9 @@
 FROM python:3.11.4-bookworm
 
 # Set the working directory
-WORKDIR /app
+WORKDIR /usr/src/app
 
-ADD script.py .
+ADD src/. .
 
 RUN pip install -r requirements.txt
 

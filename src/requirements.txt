@@ -1,6 +1,6 @@
 langchain==0.0.270
 pypdf==3.15.2
 python-dotenv==1.0.0
-streamlit==1.23.1
+streamlit==1.25.0
 streamlit_chat==0.0.2.2
 supabase==1.0.4
