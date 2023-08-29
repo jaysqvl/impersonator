@@ -29,28 +29,23 @@ docker build -t impersonator .
 docker run -p 8501:8501 impersonator
 ~~~
 
-6. Go to the ip bound in the dockerfile
+6. Access the port that you bound docker on your machine!
 ~~~
 http://localhost:8501
 ~~~
 
 ### Without Docker
-4. Change directories into the src folder
+4. Install all dependencies
 ~~~
-cd src/
-~~~
-
-5. Install all dependencies
-~~~
-pip install -r requirements.txt
+pip install -r src/requirements.txt
 ~~~
 
-6. Run the app!
+5. Run the app!
 ~~~
-streamlit run script.py
+streamlit run src/script.py
 ~~~
 
-7. Go to the local host link provided in the CLI!
+6. Go to the local host link provided in the CLI!
 
 ## To-Do
 - Validate the uploaded files

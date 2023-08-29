@@ -10,17 +10,19 @@ from langchain.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain.vectorstores import SupabaseVectorStore
 from supabase import create_client, Client
-# import pinecone
+import openai
+import pinecone
+import requests
 
 # SETUP BEFORE USE
 load_dotenv()
 oa_api_key = os.getenv('OPENAI_API_KEY')
 sb_api_key = os.getenv('SUPABASE_API_KEY')
 sb_proj_url = os.getenv('SUPABASE_PROJ_URL')
+hf_api_key = None
+pc_api_key = None
 supabase: Client = create_client(sb_proj_url, sb_api_key)
-
-# for switching to pinecone
-# pinecone.init(api_key=os.getenv('PINECONE_API_KEY'), environment="us-west1-gcp");
+pinecone.init(api_key=os.getenv('PINECONE_API_KEY'), environment="us-west1-gcp")
 
 def generate_answer(user_input):
     response = st.session_state.conversation({'question': user_input})
@@ -69,6 +71,7 @@ def init_vector_db(text_batches):
     return vector_db
 
 def get_conversation_chain(vector_db):
+    
     llm = ChatOpenAI(openai_api_key=oa_api_key, model="gpt-3.5-turbo")
 
     # for switching to huggingface to use different LLMs
@@ -84,21 +87,115 @@ def get_conversation_chain(vector_db):
 
     return conversation_chain
 
+def check_openai_api_key(api_key):
+    headers = {
+        "Authorization": f"Bearer {api_key}"
+    }
+
+    response = requests.post(
+        "https://api.openai.com/v1/engines/davinci-codex/completions",
+        headers=headers,
+        json={
+            "prompt": "Once upon a time,",
+            "max_tokens": 5
+        }
+    )
+
+    if response.status_code == 200:
+        print("Your OpenAI API key is valid.")
+        return True
+    elif response.status_code == 401:
+        print("Your OpenAI API key is invalid or unauthorized.")
+        return False
+    else:
+        print(f"An error occurred: {response.status_code}, {response.json()}")
+        return False
+    
+def change_openai_api_key(api_key):
+    global oa_api_key
+    os.environ['OPENAI_API_KEY'] = api_key
+    oa_api_key = api_key
+
+def change_pinecone_api_key(api_key):
+    global pc_api_key
+    os.environ['PINECONE_API_KEY'] = api_key
+    pc_api_key = api_key
+
+
+def change_supabase_api_key(api_key):
+    global sb_api_key
+    os.environ['SUPABASE_API_KEY'] = api_key
+    sb_api_key = api_key
 
 def main():
-    st.header("Welcome to Jays Trainable Chatbot")
-
-    if "conversation" not in st.session_state:
-        st.session_state.conversation = None
-    if "chat_history" not in st.session_state:
-        st.session_state.history = None
-    
-    user_input = st.text_input("Talk to the bot", key="input_text")
-    if user_input:
-        generate_answer(user_input)
+    # Sidebar Configuration
+    global oa_api_key
+    global sb_api_key
+    global sb_proj_url
+    global hf_api_key
 
     with st.sidebar:
-        st.subheader("Your documents")
+        st.subheader("Model Selection", divider = True)
+        # LLM Provider Selector Dropdown
+        llm_brand_chosen = st.selectbox("Select LLM Provider", ["(default) OpenAI", "HuggingFace"])
+
+        # What shows up if you select OpenAI as your LLM provider
+        if llm_brand_chosen == "(default) OpenAI":
+            # Toggle for changing the default GPT version
+            activated = st.toggle("Change GPT Version (Requires own api key)", value=False)
+            
+            # Warning message
+            st.write("WARNING: Changing default GPT version requires your own OpenAI API Key which will bill you for use of both the Ada Embedding model and selected LLM model")
+            st.write("Toggle off sets the model back to the default LLM model automatically and uses the hosts API key (e.g. gpt-3.5-turbo)")
+
+            # Model Selector Dropdown
+            display = ("(default) gpt-3.5-turbo (recommended, cheapest)", 
+                        "gpt-3.5-turbo-16k (4x context)", 
+                        "gpt-4 (expensive)", 
+                        "gpt-4-32k (most expensive, 4x context))")
+            options = list(range(len(display))) # Enumerates the display list
+            llm_brand_model_chosen = st.selectbox("Select LLM Model", 
+                                                  options,
+                                                  format_func=lambda x: display[x],
+                                                  disabled=(not activated))
+
+            # API Key Input Text Box
+            if (activated & (llm_brand_model_chosen != 0)):
+                llm_api_key = st.text_input("Enter Your Own OpenAI API Key")
+                
+                changed = st.button("Save Key", on_click=check_openai_api_key, args = [llm_api_key])
+                if (changed):
+                    change_openai_api_key(llm_api_key)
+                    st.write("OpenAI API Key Successfully Updated!")
+                else:
+                    st.write("OpenAI API Key Invalid or Unauthorized. Please Try Again Or Use The Default Model.")
+            else:
+                oa_api_key = os.getenv('OPENAI_API_KEY')
+
+        # What shows up if you select HuggingFace as your LLM provider
+        elif llm_brand_chosen == "HuggingFace":
+            # Toggle for changing the default HuggingFace LLM model
+            activated = st.toggle("Change Default HF Model", value=False)
+
+            display = ("(default) google/flan-t5-xxl (recommended, cheapest)", 
+                       "google/flan-t5-xxl (4x context)", 
+                       "google/flan-t5-xxl (most expensive, 4x context)")
+            options = list(range(len(display))) # Enumerates the display list
+            llm_brand_model_chosen = st.selectbox("Select LLM Model",
+                                                    options,
+                                                    format_func=lambda x: display[x], 
+                                                    disabled=(not activated))
+            
+            llm_api_key = st.text_input("Enter HuggingFace API Key")
+            if llm_api_key != "":
+                hf_api_key = llm_api_key
+        
+        vdb_chosen = st.selectbox("Select VectorDB Provider", ["Supabase", "Pinecone"])
+        vdb_api_key = st.text_input("Enter VectorDB API Key")
+        if vdb_api_key != "":
+            sb_api_key = vdb_api_key
+                
+        st.subheader("Documents to Ask Questions To", divider = True)
         pdfs = st.file_uploader("Upload your PDFs here and click on 'Process'", accept_multiple_files=True)
         if st.button("Process"):
             with st.spinner("Processing"):
@@ -110,6 +207,21 @@ def main():
 
                 # create conversation chain
                 st.session_state.conversation = get_conversation_chain(vector_db)
+
+    # Main Page Configuration
+    st.header("Welcome to Jays Trainable Chatbot")
+
+    st.write("LLM Key in Use: " + oa_api_key)
+    st.write("VectorDB Key in Use: " + sb_api_key)
+
+    if "conversation" not in st.session_state:
+        st.session_state.conversation = None
+    if "chat_history" not in st.session_state:
+        st.session_state.history = None
+    
+    user_input = st.text_input("Talk to the bot", key="input_text")
+    if user_input:
+        generate_answer(user_input)
 
 if __name__ == "__main__":
     main()
