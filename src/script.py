@@ -10,27 +10,29 @@ from langchain.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain.vectorstores import SupabaseVectorStore
 from supabase import create_client, Client
-import openai
+from langchain.llms import HuggingFaceHub
 import pinecone
 import requests
+import pyautogui
 
 # Loads the .env file
 load_dotenv()
 
-# Global APP Settings
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Global Dynamic APP Settings
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 change_default_llm = False
 change_default_vdb = False
 llm = "OpenAI"
 llm_model = "gpt-3.5-turbo"
 vector_db = "Supabase"
-
-# Global Variables
 temp_key = ""
 oa_api_key = os.getenv('OPENAI_API_KEY')
 sb_api_key = os.getenv('SUPABASE_API_KEY')
 sb_proj_url = os.getenv('SUPABASE_PROJ_URL')
 hf_api_key = None
 pc_api_key = None
+
 supabase: Client = create_client(sb_proj_url, sb_api_key)
 pinecone.init(api_key=os.getenv('PINECONE_API_KEY'), environment="us-west1-gcp")
 
@@ -81,11 +83,10 @@ def init_vector_db(text_batches):
     return vector_db
 
 def get_conversation_chain(vector_db):
-    
-    llm = ChatOpenAI(openai_api_key=oa_api_key, model="gpt-3.5-turbo")
-
-    # for switching to huggingface to use different LLMs
-    # llm = HuggingFaceHub(repo_id="google/flan-t5-xxl", model_kwargs={"temperature":0.5, "max_length":512})
+    if llm == "OpenAI":
+        llm = ChatOpenAI(openai_api_key=oa_api_key, model=llm_model)
+    elif llm == "HuggingFace":
+        llm = HuggingFaceHub(repo_id=llm_model, model_kwargs={"temperature":0.5, "max_length":512})
 
     memory = ConversationBufferMemory(
         memory_key='chat_history', return_messages=True)
@@ -122,8 +123,27 @@ def check_openai_api_key(api_key):
         print(f"An error occurred: {response.status_code}, {response.json()}")
         return False
 
+def reset_app_hard():
+    pyautogui.hotkey("ctrl", "F5")
+
+def reset_settings():
+    # Resets all the global APP settings
+    global llm; llm_model; vector_db; temp_key; oa_api_key; sb_api_key; sb_proj_url; hf_api_key; pc_api_key
+
+    llm = "OpenAI"
+    llm_model = "gpt-3.5-turbo"
+    vector_db = "Supabase"
+    temp_key = ""
+    oa_api_key = os.getenv('OPENAI_API_KEY')
+    sb_api_key = os.getenv('SUPABASE_API_KEY')
+    sb_proj_url = os.getenv('SUPABASE_PROJ_URL')
+    hf_api_key = None
+    pc_api_key = None
+
+
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Setters for the API Keys
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 def change_openai_api_key(api_key):
     global oa_api_key
     os.environ['OPENAI_API_KEY'] = api_key
@@ -144,8 +164,10 @@ def change_pinecone_api_key(api_key):
     global pc_api_key
     pc_api_key = api_key
 
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Streamlit View Components
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 def model_select_section():
     global oa_api_key
     global hf_api_key
@@ -230,7 +252,9 @@ def document_upload_section():
             # create conversation chain
             st.session_state.conversation = get_conversation_chain(vector_db)
 
-# All the streamlit stuff
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Runner
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 def main():
     # Sidebar Configuration
     global sb_api_key
