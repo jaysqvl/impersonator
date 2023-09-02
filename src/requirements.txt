@@ -7,3 +7,4 @@ supabase==1.0.4
 pinecone-client==2.2.2
 openai==0.27.9
 requests==2.31.0
+pyautogui==0.9.54
