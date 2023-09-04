@@ -42,7 +42,9 @@ pinecone.init(api_key=os.getenv('PINECONE_API_KEY'), environment="us-west1-gcp")
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def reset_app_hard():
+    # Refreshes the page on both windows and mac
     pyautogui.hotkey("ctrl", "F5")
+    pyautogui.hotkey("command", "R")
 
 def reset_settings():
     # Resets all the global APP settings
@@ -169,14 +171,29 @@ def vector_db_select_section():
 
     # VectorDB Provider Selector Dropdown
     vdb_activated = st.toggle("Use Your Own VectorDB Provider", value=False)
-    vdb_chosen = st.selectbox("Select VectorDB Provider", ["Supabase", "Pinecone"], disabled=(not vdb_activated))
+
+    display = ("(default) Supabase", 
+               "Pinecone")  
+    options = list(range(len(display))) # Enumerates the display list
+    vdb_chosen = st.selectbox("Select VectorDB Provider", 
+                                            options,
+                                            format_func=lambda x: display[x],
+                                            disabled=(not vdb_activated))
     if vdb_activated:
         vdb_api_key = st.text_input("Enter VectorDB API Key")
-        changed = st.button("Save Key", change_supabase_api_key, args = [vdb_api_key])
-        if (changed):
-            st.write("Supabase API Key Successfully Updated!")
-        else:
-            st.write("Supabase API Key Invalid or Unauthorized. Please Try Again.")
+        if vdb_api_key:
+            if vdb_chosen == 0:
+                if (check_supabase_api_key(vdb_api_key)):
+                    change_supabase_api_key(vdb_api_key)
+                    st.write("Supabase API Key Successfully Updated!")
+                else:
+                    st.write("Supabase API Key Invalid or Unauthorized. Please Try Again.")
+            elif vdb_chosen == 1:
+                if (check_pinecone_api_key(vdb_api_key)):
+                    change_pinecone_api_key(vdb_api_key)
+                    st.write("Pinecone API Key Successfully Updated!")
+                else:
+                    st.write("Pinecone API Key Invalid or Unauthorized. Please Try Again.")
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # VectorDB Document Upload and Integration into LLM Pipeline
@@ -267,6 +284,12 @@ def main():
     global sb_proj_url
 
     with st.sidebar:
+        # Reset Button
+        st.subheader("Reset", divider = True)
+        st.write("WARNING: Resets all settings and clears all uploaded documents")
+        if st.button("Reset App"):
+            reset_app_hard()
+
         st.subheader("Model Selection", divider = True)
         model_select_section()
         
