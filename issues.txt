@@ -1,0 +1,4 @@
+To Do
+vector_db_select_section()
+    - Implement VDB_Chosen globally so that pinecone or supabase is selected
+    - 
