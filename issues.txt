@@ -1,4 +1,37 @@
-To Do
+Issue 1: Model Selection Switcher in Functions
+
+Description: Need to encapsulate all of the functions that are attached to each specific setting
+
+(*) means that these functions depend on the globally selected settings
+
+model_select_section()
+•	Check_openai_api_key()
+•	Change_openai_api_key()
+
+vector_db_select_section()
+- check_supabase_api_key
+- change_supabase_api_key
+- check_pinecone_api_key
+- change_pinecone_api_key
+
+document_upload_section()
+•	Ingest(pdfs)
+    - Get_text(pdfs)
+    - Get_Text_batches(text)
+•	Init_vector_db()
+    - OpenAIEmbeddings(oa_api_key)
+    - Option 1: SupabaseVectorStore.from_texts(text_batches, embeddings, supabase_client, table_name=”documents”)
+    - Option 2: pinecone.create_index("python-index", dimension=1536, metric="cosine")
+•	Get_conversation_chain()
+    - Option 1: ChatOpenAI(openai_api_key=oa_api_key, model=llm_model)
+    - Option 2: HuggingFaceHub(repo_id=llm_model, model_kwargs={"temperature":0.5, "max_length":512})
+    - ConversationBufferMemory(memory_key='chat_history', return_messages=True)
+    - conversation_chain = ConversationalRetrievalChain.from_llm(
+        llm=llm,
+        retriever=vector_db.as_retriever(search_type="similarity"),
+        memory=memory)
+
+Issue 2: Vector DB Selector needs to change 
 vector_db_select_section()
     - Implement VDB_Chosen globally so that pinecone or supabase is selected
-    - 
+

@@ -21,12 +21,27 @@ load_dotenv()
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Global Dynamic APP Settings
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# If all of the keys are filled in, then the app is ready to go
+ready=True
+
+# For keeping track of which settings have been changed
 change_default_llm = False
 change_default_vdb = False
-llm = "OpenAI"
-llm_model = "gpt-3.5-turbo"
-vector_db = "Supabase"
+
+# Default Settings
+llm = 0 # 0 == OpenAI
+        # 1 == HuggingFAce
+llm_model_oa = 0 # 0 == gpt-3.5-turbo (default)
+                 # 1 == gpt-3.5-turbo-16k (4x context) 
+                 # 2 == "gpt-4 (expensive)
+                 # 3 == gpt-4-32k (most expensive, 4x context)
+llm_model_hf = 0 # 0 == (default) google/flan-t5-xxl (recommended, cheapest)
+                 # 1 ==  google/flan-t5-xxl (4x context)
+                 # 2 == google/flan-t5-xxl (most expensive, 4x context)
+vector_db = 0 # 0 == Supabase
+              # 1 == Pinecone
 temp_key = ""
+
 oa_api_key = os.getenv('OPENAI_API_KEY')
 sb_api_key = os.getenv('SUPABASE_API_KEY')
 sb_proj_url = os.getenv('SUPABASE_PROJ_URL')
@@ -48,12 +63,22 @@ def reset_app_hard():
 
 def reset_settings():
     # Resets all the global APP settings
-    global llm; llm_model; vector_db; temp_key; oa_api_key; sb_api_key; sb_proj_url; hf_api_key; pc_api_key
+    global llm; llm_model_oa; llm_model_hf, vector_db; temp_key; oa_api_key; sb_api_key; sb_proj_url; hf_api_key; pc_api_key
 
-    llm = "OpenAI"
-    llm_model = "gpt-3.5-turbo"
-    vector_db = "Supabase"
+    # Default Settings
+    llm = 0 # 0 == OpenAI
+            # 1 == HuggingFAce
+    llm_model_oa = 0 # 0 == gpt-3.5-turbo (default)
+                    # 1 == gpt-3.5-turbo-16k (4x context) 
+                    # 2 == "gpt-4 (expensive)
+                    # 3 == gpt-4-32k (most expensive, 4x context)
+    llm_model_hf = 0 # 0 == (default) google/flan-t5-xxl (recommended, cheapest)
+                    # 1 ==  google/flan-t5-xxl (4x context)
+                    # 2 == google/flan-t5-xxl (most expensive, 4x context)
+    vector_db = 0 # 0 == Supabase
+                  # 1 == Pinecone
     temp_key = ""
+
     oa_api_key = os.getenv('OPENAI_API_KEY')
     sb_api_key = os.getenv('SUPABASE_API_KEY')
     sb_proj_url = os.getenv('SUPABASE_PROJ_URL')
@@ -66,21 +91,21 @@ def reset_settings():
 
 def change_openai_api_key(api_key):
     global oa_api_key
-    os.environ['OPENAI_API_KEY'] = api_key
     oa_api_key = api_key
 
 def change_supabase_api_key(api_key):
     global sb_api_key
-    os.environ['SUPABASE_API_KEY'] = api_key
     sb_api_key = api_key
 
+def change_supabase_proj_url(proj_url):
+    global sb_proj_url
+    sb_proj_url = proj_url
+
 def change_huggingface_api_key(api_key):
-    # No default key
     global hf_api_key
     hf_api_key = api_key
 
 def change_pinecone_api_key(api_key):
-    # No default key
     global pc_api_key
     pc_api_key = api_key
 
@@ -114,16 +139,19 @@ def model_select_section():
     global hf_api_key
 
     # LLM Provider Selector Dropdown
-    llm_brand_chosen = st.selectbox("Select LLM Provider", ["(default) OpenAI", "HuggingFace"])
+    display = ("(default) OpenAI", "HuggingFace") 
+    options = list(range(len(display))) # Enumerates the display list
+    llm_brand_selectbox = st.selectbox("Select LLM Provider", options, format_func=lambda x: display[x])
 
     # What shows up if you select OpenAI as your LLM provider
-    if llm_brand_chosen == "(default) OpenAI":
+    if llm_brand_selectbox == 0: # Represents OpenAI
         # Toggle for changing the default GPT version
         activated = st.toggle("Change GPT Version (Requires own api key)", value=False)
-        
-        # Warning message
-        st.write("WARNING: Changing default GPT version requires your own OpenAI API Key which will bill you for use of both the Ada Embedding model and selected LLM model")
-        st.write("Toggle off sets the model back to the default LLM model automatically and uses the hosts API key (e.g. gpt-3.5-turbo)")
+
+        if activated:
+            # Warning message
+            st.write("WARNING: Changing default GPT version requires your own OpenAI API Key which will bill you for use of both the Ada Embedding model and selected LLM model")
+            st.write("Toggle off sets the model back to the default LLM model automatically and uses the hosts API key (e.g. gpt-3.5-turbo)")
 
         # Model Selector Dropdown
         display = ("(default) gpt-3.5-turbo (recommended, cheapest)", 
@@ -138,6 +166,7 @@ def model_select_section():
 
         # API Key Input Text Box
         if (activated & (llm_brand_model_chosen != 0)):
+            
             llm_api_key = st.text_input("Enter Your Own OpenAI API Key")
 
             if llm_api_key:
@@ -148,7 +177,7 @@ def model_select_section():
                     st.write("OpenAI API Key Invalid or Unauthorized. Please Try Again Or Use The Default Model.")
 
     # What shows up if you select HuggingFace as your LLM provider
-    elif llm_brand_chosen == "HuggingFace":
+    elif llm_brand_selectbox == 1: # Represents HuggingFace
         # Toggle for changing the default HuggingFace LLM model
         activated = st.toggle("Change Default HF Model", value=False)
 
@@ -179,21 +208,27 @@ def vector_db_select_section():
                                             options,
                                             format_func=lambda x: display[x],
                                             disabled=(not vdb_activated))
+    
     if vdb_activated:
-        vdb_api_key = st.text_input("Enter VectorDB API Key")
-        if vdb_api_key:
-            if vdb_chosen == 0:
-                if (check_supabase_api_key(vdb_api_key)):
-                    change_supabase_api_key(vdb_api_key)
-                    st.write("Supabase API Key Successfully Updated!")
-                else:
-                    st.write("Supabase API Key Invalid or Unauthorized. Please Try Again.")
-            elif vdb_chosen == 1:
-                if (check_pinecone_api_key(vdb_api_key)):
-                    change_pinecone_api_key(vdb_api_key)
-                    st.write("Pinecone API Key Successfully Updated!")
-                else:
-                    st.write("Pinecone API Key Invalid or Unauthorized. Please Try Again.")
+        st.write("WARNING: Does not have API key or project URL verification. Requires a compatible VectorDB Provider, API Key and properly set-up/pre-configured project's URL, otherwise the app will not work.")
+
+        st.write("In case of error, please reset the app or contact the developer.")
+        if vdb_chosen == 0:
+            sb_vdb_api_key = st.text_input("Enter VectorDB API Key")
+            if sb_vdb_api_key:
+                change_supabase_api_key(sb_vdb_api_key)
+                st.write("Supabase API Key Successfully Updated!")
+
+            sb_proj_url = st.text_input("Enter Supabase Project URL")
+            if sb_proj_url:
+                change_supabase_proj_url(sb_proj_url)
+                st.write("Supabase Project URL Successfully Updated!")
+        elif vdb_chosen == 1:
+            pc_vdb_api_key = st.text_input("Enter VectorDB API Key")
+            if pc_vdb_api_key:
+                change_pinecone_api_key(pc_vdb_api_key)
+                st.write("Pinecone API Key Successfully Updated!")
+        
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # VectorDB Document Upload and Integration into LLM Pipeline
@@ -233,18 +268,18 @@ def init_vector_db(text_batches):
     return vector_db
 
 def get_conversation_chain(vector_db):
-    if llm == "OpenAI":
+    global llm
+
+    if llm == 0:
         llm = ChatOpenAI(openai_api_key=oa_api_key, model=llm_model)
-    elif llm == "HuggingFace":
+    elif llm == 1:
         llm = HuggingFaceHub(repo_id=llm_model, model_kwargs={"temperature":0.5, "max_length":512})
 
-    memory = ConversationBufferMemory(
-        memory_key='chat_history', return_messages=True)
+    memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True)
     conversation_chain = ConversationalRetrievalChain.from_llm(
         llm=llm,
         retriever=vector_db.as_retriever(search_type="similarity"),
-        memory=memory
-    )
+        memory=memory)
 
     return conversation_chain
 
@@ -280,14 +315,11 @@ def generate_answer(user_input):
 
 def main():
     # Sidebar Configuration
-    global sb_api_key
-    global sb_proj_url
-
     with st.sidebar:
         # Reset Button
         st.subheader("Reset", divider = True)
         st.write("WARNING: Resets all settings and clears all uploaded documents")
-        if st.button("Reset App"):
+        if st.button("Hard Reset App"):
             reset_app_hard()
 
         st.subheader("Model Selection", divider = True)
@@ -310,10 +342,10 @@ def main():
         st.session_state.history = None
     
     # Not ready if no pdfs uploaded, no vector db, or no conversation chain
-    if (True):
-        st.write("Status: Not ready")
+    if (ready):
+        st.write("Status: Ready to go!")
     else:
-        st.write("Status: Ready")
+        st.write("Status: Not Ready. Please upload PDFs and select a VectorDB Provider.")
 
     user_input = st.text_input("Talk to the bot", key="input_text")
     if user_input:
