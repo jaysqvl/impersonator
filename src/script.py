@@ -47,9 +47,7 @@ sb_api_key = os.getenv('SUPABASE_API_KEY')
 sb_proj_url = os.getenv('SUPABASE_PROJ_URL')
 hf_api_key = None
 pc_api_key = None
-
-supabase: Client = create_client(sb_proj_url, sb_api_key)
-pinecone.init(api_key=os.getenv('PINECONE_API_KEY'), environment="us-west1-gcp")
+pc_env_key = None
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -93,21 +91,9 @@ def change_openai_api_key(api_key):
     global oa_api_key
     oa_api_key = api_key
 
-def change_supabase_api_key(api_key):
-    global sb_api_key
-    sb_api_key = api_key
-
-def change_supabase_proj_url(proj_url):
-    global sb_proj_url
-    sb_proj_url = proj_url
-
 def change_huggingface_api_key(api_key):
     global hf_api_key
     hf_api_key = api_key
-
-def change_pinecone_api_key(api_key):
-    global pc_api_key
-    pc_api_key = api_key
 
 # Checks the validity of the OpenAI API Key before applying it
 def check_openai_api_key(api_key):
@@ -194,6 +180,42 @@ def model_select_section():
         if llm_api_key != "":
             hf_api_key = llm_api_key
 
+def change_supabase_api_key(api_key):
+    global sb_api_key
+    sb_api_key = api_key
+
+def change_supabase_proj_url(proj_url):
+    global sb_proj_url
+    sb_proj_url = proj_url
+
+def initialize_supabase(api_key, proj_url):
+    global sb_api_key, sb_proj_url, supabase_client
+    sb_api_key = api_key
+    sb_proj_url = proj_url
+
+    try: 
+        supabase_client: Client = create_client(sb_proj_url, sb_api_key)
+    except:
+        st.write("Your Supabase API Key or Project URL is invalid. Keys removed. Please try again")
+        sb_api_key = None
+        sb_proj_url = None
+    else:
+        st.write("Supabase API Key and Project URL Successfully Updated!")
+
+def initialize_pinecone(api_key, env_key):
+    global pc_api_key, pc_env_key
+    pc_api_key = api_key
+    pc_env_key = env_key
+
+    try:
+        pinecone.init(api_key=pc_api_key, environment=pc_env_key)
+    except:
+        st.write("Your Pinecone API Key or Environment Key is invalid. Keys removed. Please try again")
+        pc_api_key = None
+        pc_env_key = None
+    else:
+        st.write("Pinecone API Key and Environment Key Successfully Updated!")
+
 def vector_db_select_section():
     global sb_api_key
     global sb_proj_url
@@ -210,19 +232,18 @@ def vector_db_select_section():
                                             disabled=(not vdb_activated))
     
     if vdb_activated:
-        st.write("WARNING: Does not have API key or project URL verification. Requires a compatible VectorDB Provider, API Key and properly set-up/pre-configured project's URL, otherwise the app will not work.")
+        st.write("WARNING: Does not have API key or project URL verification. Requires a compatible VectorDB Provider, API Key and properly set-up/pre-configured project's URL, otherwise the app will not work. Visit Supabase's blog post for more information:")
 
-        st.write("In case of error, please reset the app or contact the developer.")
+        st.write("https://supabase.com/blog/openai-embeddings-postgres-vector")
+
+        st.write("In case of error, please reset the app using the above button or contact the developer.")
         if vdb_chosen == 0:
             sb_vdb_api_key = st.text_input("Enter VectorDB API Key")
-            if sb_vdb_api_key:
-                change_supabase_api_key(sb_vdb_api_key)
-                st.write("Supabase API Key Successfully Updated!")
-
             sb_proj_url = st.text_input("Enter Supabase Project URL")
-            if sb_proj_url:
-                change_supabase_proj_url(sb_proj_url)
-                st.write("Supabase Project URL Successfully Updated!")
+
+            if sb_vdb_api_key and sb_proj_url:
+                initialize_supabase(sb_vdb_api_key, sb_proj_url)
+                
         elif vdb_chosen == 1:
             pc_vdb_api_key = st.text_input("Enter VectorDB API Key")
             if pc_vdb_api_key:
@@ -268,12 +289,12 @@ def init_vector_db(text_batches):
     return vector_db
 
 def get_conversation_chain(vector_db):
-    global llm
+    global llm, llm_model_oa, llm_model_hf
 
     if llm == 0:
-        llm = ChatOpenAI(openai_api_key=oa_api_key, model=llm_model)
+        llm = ChatOpenAI(openai_api_key=oa_api_key, model=llm_model_oa)
     elif llm == 1:
-        llm = HuggingFaceHub(repo_id=llm_model, model_kwargs={"temperature":0.5, "max_length":512})
+        llm = HuggingFaceHub(repo_id=llm_model_hf, model_kwargs={"temperature":0.5, "max_length":512})
 
     memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True)
     conversation_chain = ConversationalRetrievalChain.from_llm(
