@@ -41,7 +41,7 @@ llm_model_oa = 0 # 0 == gpt-3.5-turbo (default)
 llm_model_hf = 0 # 0 == (default) google/flan-t5-xxl (recommended, cheapest)
                  # 1 ==  google/flan-t5-xxl (4x context)
                  # 2 == google/flan-t5-xxl (most expensive, 4x context)
-vector_db = 0 # 0 == Supabase
+vdb_chosen = 0 # 0 == Supabase
               # 1 == Pinecone
 
 oa_api_key = os.getenv('OPENAI_API_KEY')
@@ -50,6 +50,7 @@ sb_proj_url = os.getenv('SUPABASE_PROJ_URL')
 hf_api_key = None
 pc_api_key = None
 pc_env_key = None
+pc_index_name = "openai"
 supabase_client: Client = create_client(sb_proj_url, sb_api_key)
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -77,7 +78,6 @@ def reset_settings():
                     # 2 == google/flan-t5-xxl (most expensive, 4x context)
     vector_db = 0 # 0 == Supabase
                   # 1 == Pinecone
-    temp_key = ""
 
     oa_api_key = os.getenv('OPENAI_API_KEY')
     sb_api_key = os.getenv('SUPABASE_API_KEY')
@@ -123,7 +123,7 @@ def check_openai_api_key(api_key):
         return False
 
 def hf_inputs():
-    global hf_api_key
+    global hf_api_key, llm_model_hf
 
     activated = st.toggle("Change Default HF Model", value=False)
 
@@ -131,10 +131,11 @@ def hf_inputs():
                 "google/flan-t5-xxl (4x context)", 
                 "google/flan-t5-xxl (most expensive, 4x context)")
     options = list(range(len(display))) # Enumerates the display list
-    llm_model_chosen = st.selectbox("Select LLM Model",
+    llm_model_hf = st.selectbox("Select LLM Model",
                                             options,
                                             format_func=lambda x: display[x], 
                                             disabled=(not activated), key="hf_model_selectbox")
+
     if activated:
         llm_api_key = st.text_input("Enter HuggingFace API Key")
         if llm_api_key != "":
@@ -142,6 +143,8 @@ def hf_inputs():
         
 
 def oa_inputs():
+    global llm_model_oa
+
     activated = st.toggle("Change GPT Version (Requires own api key)", value=False)
 
     if activated:
@@ -155,13 +158,13 @@ def oa_inputs():
                 "gpt-4 (expensive)", 
                 "gpt-4-32k (most expensive, 4x context))")
     options = list(range(len(display))) # Enumerates the display list
-    llm_model_chosen = st.selectbox("Select LLM Model", 
+    llm_model_oa = st.selectbox("Select LLM Model", 
                                             options,
                                             format_func=lambda x: display[x],
                                             disabled=(not activated))
 
     # API Key Input Text Box
-    if (activated & (llm_model_chosen != 0)):
+    if (activated & (llm_model_oa != 0)):
         ready = False
         llm_api_key = st.text_input("Enter Your Own OpenAI API Key (and press enter)")
 
@@ -174,8 +177,6 @@ def oa_inputs():
                 st.write("OpenAI API Key Invalid or Unauthorized. Please Try Again Or Use The Default Model.")
 
 def model_select_section():
-    global oa_api_key, hf_api_key, ready
-
     # LLM Provider Selector Dropdown
     display = ("(default) OpenAI", "HuggingFace") 
     options = list(range(len(display))) # Enumerates the display list
@@ -199,7 +200,7 @@ def initialize_supabase(api_key, proj_url):
     try: 
         supabase_client = create_client(sb_proj_url, sb_api_key)
     except:
-        st.write("Your Supabase API Key or Project URL is invalid. Keys removed. Please try again")
+        st.write("Your Supabase API Key or Project URL is invalid. Keys reset to default. Please try again")
         sb_api_key = os.environ("SUPABASE_API_KEY")
         sb_proj_url = os.environ("SUPABASE_PROJ_URL")
     else:
@@ -220,8 +221,7 @@ def initialize_pinecone(api_key, env_key):
         st.write("Pinecone API Key and Environment Key Successfully Updated!")
 
 def vector_db_select_section():
-    global sb_api_key
-    global sb_proj_url
+    global vdb_chosen
 
     # VectorDB Provider Selector Dropdown
     vdb_activated = st.toggle("Use Your Own VectorDB Provider", value=False)
@@ -250,9 +250,9 @@ def vector_db_select_section():
         elif vdb_chosen == 1:
             pc_vdb_api_key = st.text_input("Enter Pinecone API Key (and press enter))")
             pc_env_key = st.text_input("Enter Pinecone Environment Key (and press enter))")
-            if pc_vdb_api_key and pc_env_key:
+            pc_index_name = st.text_input("Enter Pinecone Index Name (and press enter))")
+            if pc_vdb_api_key and pc_env_key and pc_index_name:
                 initialize_pinecone(pc_vdb_api_key, pc_env_key)
-        
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # VectorDB Document Upload and Integration into LLM Pipeline
@@ -288,14 +288,11 @@ def ingest(pdfs):
 def init_vector_db(text_batches):
     print(text_batches)
     embeddings = OpenAIEmbeddings(openai_api_key=oa_api_key)
-    if vector_db == 0:
+    if vdb_chosen == 0:
         vector_db_client = SupabaseVectorStore.from_texts(text_batches, embeddings, client=supabase_client, table_name="documents")
-    elif vector_db == 1:
-        if "openai" not in pinecone.list_indexes():
-            pinecone.create_index("openai", dimension=1536, metric="cosine")
-        index = pinecone.Index("openai")
-        
-        vector_db_client = Pinecone.from_texts(text_batches, embeddings, index="openai")
+
+    elif vdb_chosen == 1:
+        vector_db_client = Pinecone.from_texts(text_batches, embeddings, index=pc_index_name)
         
     return vector_db_client
 
