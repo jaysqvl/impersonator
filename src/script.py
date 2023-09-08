@@ -32,7 +32,7 @@ change_default_llm = False
 change_default_vdb = False
 
 # Default Settings
-llm = 0 # 0 == OpenAI
+llm_brand = 0 # 0 == OpenAI
         # 1 == HuggingFAce
 llm_model_oa = 0 # 0 == gpt-3.5-turbo (default)
                  # 1 == gpt-3.5-turbo-16k (4x context) 
@@ -127,9 +127,9 @@ def hf_inputs():
 
     activated = st.toggle("Change Default HF Model", value=False)
 
-    display = ("(default) google/flan-t5-xxl (recommended, cheapest)", 
-                "google/flan-t5-xxl (4x context)", 
-                "google/flan-t5-xxl (most expensive, 4x context)")
+    display = ("(default) google/flan-t5-xxl (recommended)", 
+                "google/flan-t5-xl", 
+                "google/flan-t5-large")
     options = list(range(len(display))) # Enumerates the display list
     llm_model_hf = st.selectbox("Select LLM Model",
                                             options,
@@ -241,14 +241,14 @@ def vector_db_select_section():
         st.write("https://supabase.com/blog/openai-embeddings-postgres-vector")
 
         st.write("In case of error, please reset the app using the above button or contact the developer.")
-        if vdb_chosen == 0:
+        if vdb_chosen == 0: # Supabase
             sb_vdb_api_key = st.text_input("Enter Supabase API Key (and press enter)")
             sb_proj_url = st.text_input("Enter Supabase Project URL (and press enter)")
 
             if sb_vdb_api_key and sb_proj_url:
                 initialize_supabase(sb_vdb_api_key, sb_proj_url)
                 
-        elif vdb_chosen == 1:
+        elif vdb_chosen == 1: # Pinecone
             pc_vdb_api_key = st.text_input("Enter Pinecone API Key (and press enter))")
             pc_env_key = st.text_input("Enter Pinecone Environment Key (and press enter))")
             pc_index_name = st.text_input("Enter Pinecone Index Name (and press enter))")
@@ -301,14 +301,36 @@ def init_vector_db(text_batches):
         
     return vector_db_client
 
+def decode_llm_model(llm_brand, llm_model):
+    if llm_brand == 0: # OpenAI
+        if llm_model == 0:
+            return "gpt-3.5-turbo"
+        elif llm_model == 1:
+            return "gpt-3.5-turbo-16k"
+        elif llm_model == 2:
+            return "gpt-4"
+        elif llm_model == 3:
+            return "gpt-4-32k"
+    elif llm_brand == 1: # HuggingFace
+        if llm_model == 0:
+            return "google/flan-t5-xxl"
+        elif llm_model == 1:
+            return "google/flan-t5-xl"
+        elif llm_model == 2:
+            return "google/flan-t5-large"
+        
+
 # Step 5
 def get_conversation_chain(vector_db):
-    global llm, llm_model_oa, llm_model_hf
+    global llm_brand, llm_model_oa, llm_model_hf
 
-    if llm == 0:
-        llm = ChatOpenAI(openai_api_key=oa_api_key, model=llm_model_oa)
-    elif llm == 1:
-        llm = HuggingFaceHub(repo_id=llm_model_hf, model_kwargs={"temperature":0.5, "max_length":512})
+    if llm_brand == 0:
+        # Need to decode the llm_model_oa
+        llm_model = decode_llm_model(llm_brand, llm_model_oa)
+        llm = ChatOpenAI(openai_api_key=oa_api_key, model=llm_model)
+    elif llm_brand == 1:
+        llm_model = decode_llm_model(llm_brand, llm_model_hf)
+        llm = HuggingFaceHub(repo_id=llm_model, model_kwargs={"temperature":0.5, "max_length":512})
 
     memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True)
     conversation_chain = ConversationalRetrievalChain.from_llm(
@@ -373,7 +395,7 @@ def main():
             reset_app_hard()
 
     # Main Page Configuration
-    st.header("Welcome to Jays Trainable Chatbot")
+    st.header("Welcome to Impersonator")
 
     if "conversation" not in st.session_state:
         st.session_state.conversation = None
