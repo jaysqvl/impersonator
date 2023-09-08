@@ -64,7 +64,7 @@ def reset_app_hard():
 
 def reset_settings():
     # Resets all the global APP settings
-    global llm; llm_model_oa; llm_model_hf, vector_db; oa_api_key; sb_api_key; sb_proj_url; hf_api_key; pc_api_key
+    global llm, llm_model_oa, llm_model_hf, vector_db, oa_api_key, sb_api_key, sb_proj_url, hf_api_key, pc_api_key
 
     # Default Settings
     llm = 0 # 0 == OpenAI
@@ -123,7 +123,7 @@ def check_openai_api_key(api_key):
         return False
 
 def hf_inputs():
-    global hf_api_key, llm_model_hf
+    global llm_model_hf
 
     activated = st.toggle("Change Default HF Model", value=False)
 
@@ -137,9 +137,9 @@ def hf_inputs():
                                             disabled=(not activated), key="hf_model_selectbox")
 
     if activated:
-        llm_api_key = st.text_input("Enter HuggingFace API Key")
-        if llm_api_key != "":
-            hf_api_key = llm_api_key
+        llm_api_key_input = st.text_input("Enter HuggingFace API Key")
+        if llm_api_key_input:
+            change_huggingface_api_key(llm_api_key_input)
         
 
 def oa_inputs():
@@ -166,14 +166,14 @@ def oa_inputs():
     # API Key Input Text Box
     if (activated & (llm_model_oa != 0)):
         ready = False
-        llm_api_key = st.text_input("Enter Your Own OpenAI API Key (and press enter)")
+        llm_api_key_input = st.text_input("Enter Your Own OpenAI API Key (and press enter)")
 
-        if llm_api_key:
-            if (check_openai_api_key(llm_api_key)):
-                change_openai_api_key(llm_api_key)
+        if llm_api_key_input:
+            if (check_openai_api_key(llm_api_key_input)):
+                change_openai_api_key(llm_api_key_input)
                 st.write("OpenAI API Key Successfully Updated!")
             else:
-                llm_api_key = None
+                llm_api_key_input = None
                 st.write("OpenAI API Key Invalid or Unauthorized. Please Try Again Or Use The Default Model.")
 
 def model_select_section():
@@ -214,7 +214,7 @@ def initialize_pinecone(api_key, env_key):
     try:
         pinecone.init(api_key=pc_api_key, environment=pc_env_key)
     except:
-        st.write("Your Pinecone API Key or Environment Key is invalid. Keys removed. Please try again")
+        st.write("Your Pinecone API Key or Environment Key is invalid. Keys reset to none. Please try again")
         pc_api_key = None
         pc_env_key = None
     else:
@@ -234,6 +234,7 @@ def vector_db_select_section():
                                             format_func=lambda x: display[x],
                                             disabled=(not vdb_activated))
     
+    # If the user wants to use their own VectorDB Provider
     if vdb_activated:
         st.write("WARNING: Does not have API key or project URL verification. Requires a compatible VectorDB Provider, API Key and properly set-up/pre-configured project's URL, otherwise the app will not work. Visit Supabase's blog post for more information:")
 
@@ -253,6 +254,10 @@ def vector_db_select_section():
             pc_index_name = st.text_input("Enter Pinecone Index Name (and press enter))")
             if pc_vdb_api_key and pc_env_key and pc_index_name:
                 initialize_pinecone(pc_vdb_api_key, pc_env_key)
+    
+    # If the user leaves the default VectorDB Provider
+    if not vdb_activated:
+        reset_settings()
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # VectorDB Document Upload and Integration into LLM Pipeline
