@@ -1,6 +1,4 @@
 import streamlit as st
-import os
-from dotenv import load_dotenv
 from streamlit_chat import message as st_message
 from pypdf import PdfReader
 from langchain.chains import ConversationalRetrievalChain
@@ -9,49 +7,9 @@ from langchain.embeddings import OpenAIEmbeddings, HuggingFaceInstructEmbeddings
 from langchain.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain.vectorstores import SupabaseVectorStore
-from langchain.vectorstores import Pinecone
-from supabase import create_client, Client
 from langchain.llms import HuggingFaceHub
-import pinecone
 import requests
 import pyautogui
-
-# Loads the .env file
-load_dotenv()
-
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Global Dynamic APP Settings
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# If all of the keys are filled in, then the app is ready to go
-ready=True
-initialized_app_for_questions = False # For keeping track of whether someone has already hit process
-change_after_init = False # For keeping track of whether the settings have been changed after initialization
-
-# For keeping track of which settings have been changed
-change_default_llm = False
-change_default_vdb = False
-
-# Default Settings
-llm_brand = 0 # 0 == OpenAI
-        # 1 == HuggingFAce
-llm_model_oa = 0 # 0 == gpt-3.5-turbo (default)
-                 # 1 == gpt-3.5-turbo-16k (4x context) 
-                 # 2 == "gpt-4 (expensive)
-                 # 3 == gpt-4-32k (most expensive, 4x context)
-llm_model_hf = 0 # 0 == (default) google/flan-t5-xxl (recommended, cheapest)
-                 # 1 ==  google/flan-t5-xxl (4x context)
-                 # 2 == google/flan-t5-xxl (most expensive, 4x context)
-vdb_chosen = 0 # 0 == Supabase
-              # 1 == Pinecone
-
-oa_api_key = os.getenv('OPENAI_API_KEY')
-sb_api_key = os.getenv('SUPABASE_API_KEY')
-sb_proj_url = os.getenv('SUPABASE_PROJ_URL')
-hf_api_key = None
-pc_api_key = None
-pc_env_key = None
-pc_index_name = "openai"
-supabase_client: Client = create_client(sb_proj_url, sb_api_key)
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Global Reset Functions
@@ -64,10 +22,10 @@ def reset_app_hard():
 
 def reset_settings():
     # Resets all the global APP settings
-    global llm, llm_model_oa, llm_model_hf, vector_db, oa_api_key, sb_api_key, sb_proj_url, hf_api_key, pc_api_key
+    global llm_brand, llm_model_oa, llm_model_hf, vector_db, oa_api_key, sb_api_key, sb_proj_url, hf_api_key, pc_api_key
 
     # Default Settings
-    llm = 0 # 0 == OpenAI
+    llm_brand = 0 # 0 == OpenAI
             # 1 == HuggingFAce
     llm_model_oa = 0 # 0 == gpt-3.5-turbo (default)
                     # 1 == gpt-3.5-turbo-16k (4x context) 
@@ -85,6 +43,9 @@ def reset_settings():
     hf_api_key = None
     pc_api_key = None
 
+    initialize_supabase_client(sb_api_key, sb_proj_url)
+    initialize_openai_client(oa_api_key)
+
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Settings Selection Section
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -96,6 +57,11 @@ def change_openai_api_key(api_key):
 def change_huggingface_api_key(api_key):
     global hf_api_key
     hf_api_key = api_key
+
+def initialize_openai_client(api_key):
+    global oa_api_key, llm
+    oa_api_key = api_key
+    llm = ChatOpenAI(openai_api_key=oa_api_key, model="gpt-3.5-turbo")
 
 # Checks the validity of the OpenAI API Key before applying it
 def check_openai_api_key(api_key):
@@ -127,8 +93,8 @@ def hf_inputs():
 
     activated = st.toggle("Change Default HF Model", value=False)
 
-    display = ("(default) google/flan-t5-xxl (recommended)", 
-                "google/flan-t5-xl", 
+    display = ("(default) google/flan-t5-xl (recommended)", 
+                "google/flan-t5-xxl (risks timeout)", 
                 "google/flan-t5-large")
     options = list(range(len(display))) # Enumerates the display list
     llm_model_hf = st.selectbox("Select LLM Model",
@@ -164,7 +130,7 @@ def oa_inputs():
                                             disabled=(not activated))
 
     # API Key Input Text Box
-    if (activated & (llm_model_oa != 0)):
+    if (activated & (llm_model_oa != 0)): # Only asks for API key if the user has selected a model other than the default
         ready = False
         llm_api_key_input = st.text_input("Enter Your Own OpenAI API Key (and press enter)")
 
@@ -192,7 +158,7 @@ def model_select_section():
         # Toggle for changing the default HuggingFace LLM model
         hf_inputs()
 
-def initialize_supabase(api_key, proj_url):
+def initialize_supabase_client(api_key, proj_url):
     global sb_api_key, sb_proj_url, supabase_client
     sb_api_key = api_key
     sb_proj_url = proj_url
@@ -206,7 +172,7 @@ def initialize_supabase(api_key, proj_url):
     else:
         st.write("Supabase API Key and Project URL Successfully Updated!")
 
-def initialize_pinecone(api_key, env_key):
+def initialize_pinecone_client(api_key, env_key):
     global pc_api_key, pc_env_key
     pc_api_key = api_key
     pc_env_key = env_key
@@ -246,14 +212,14 @@ def vector_db_select_section():
             sb_proj_url = st.text_input("Enter Supabase Project URL (and press enter)")
 
             if sb_vdb_api_key and sb_proj_url:
-                initialize_supabase(sb_vdb_api_key, sb_proj_url)
+                initialize_supabase_client(sb_vdb_api_key, sb_proj_url)
                 
         elif vdb_chosen == 1: # Pinecone
             pc_vdb_api_key = st.text_input("Enter Pinecone API Key (and press enter))")
             pc_env_key = st.text_input("Enter Pinecone Environment Key (and press enter))")
             pc_index_name = st.text_input("Enter Pinecone Index Name (and press enter))")
             if pc_vdb_api_key and pc_env_key and pc_index_name:
-                initialize_pinecone(pc_vdb_api_key, pc_env_key)
+                initialize_pinecone_client(pc_vdb_api_key, pc_env_key)
     
     # If the user leaves the default VectorDB Provider
     if not vdb_activated:
@@ -313,9 +279,9 @@ def decode_llm_model(llm_brand, llm_model):
             return "gpt-4-32k"
     elif llm_brand == 1: # HuggingFace
         if llm_model == 0:
-            return "google/flan-t5-xxl"
-        elif llm_model == 1:
             return "google/flan-t5-xl"
+        elif llm_model == 1:
+            return "google/flan-t5-xxl"
         elif llm_model == 2:
             return "google/flan-t5-large"
         
@@ -330,7 +296,7 @@ def get_conversation_chain(vector_db):
         llm = ChatOpenAI(openai_api_key=oa_api_key, model=llm_model)
     elif llm_brand == 1:
         llm_model = decode_llm_model(llm_brand, llm_model_hf)
-        llm = HuggingFaceHub(repo_id=llm_model, model_kwargs={"temperature":0.5, "max_length":512})
+        llm = HuggingFaceHub(repo_id=llm_model, model_kwargs={"temperature":1e-10, "max_length":512})
 
     memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True)
     conversation_chain = ConversationalRetrievalChain.from_llm(
